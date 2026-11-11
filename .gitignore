@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# Logs
+*.log
+logs/
+
+# Generated files
+coverage/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# AI tool-generated skill files
+backend/.agents/
+backend/.claude/
+backend/.cursor/
+backend/.devin/
+backend/.windsurf/
+
