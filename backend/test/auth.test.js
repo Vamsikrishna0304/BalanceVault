@@ -102,6 +102,13 @@ test("registration creates account-holder only and issues an HttpOnly session", 
 });
 
 test("login rejects invalid passwords, issues a session, and logout clears it", async (t) => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "test";
+  t.after(() => {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  });
+
   const database = createTestDatabase();
   const passwordHash = await bcrypt.hash("safe-password-123", 4);
   database.users.push({
@@ -130,12 +137,62 @@ test("login rejects invalid passwords, issues a session, and logout clears it", 
   assert.equal((await response.json()).user.role, "ACCOUNT_HOLDER");
   const cookie = getCookie(response);
   assert.ok(cookie);
+  const loginCookie = response.headers.get("set-cookie");
+  assert.match(loginCookie, /HttpOnly/i);
+  assert.match(loginCookie, /SameSite=Lax/i);
+  assert.doesNotMatch(loginCookie, /;\s*Secure(?:;|$)/i);
 
   const logout = await fetch(`${baseUrl}/api/auth/logout`, { method: "POST" });
-  assert.match(logout.headers.get("set-cookie"), /Max-Age=0/);
+  const logoutCookie = logout.headers.get("set-cookie");
+  assert.match(logoutCookie, /HttpOnly/i);
+  assert.match(logoutCookie, /SameSite=Lax/i);
+  assert.match(logoutCookie, /Max-Age=0/);
+  assert.doesNotMatch(logoutCookie, /;\s*Secure(?:;|$)/i);
   const me = await fetch(`${baseUrl}/api/auth/me`, { headers: { cookie } });
   assert.equal(me.status, 200);
   assert.equal(database.auditLogs.filter((log) => log.action === "USER_LOGIN").length, 1);
+});
+
+test("production login and logout use matching cross-site cookie attributes", async (t) => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  t.after(() => {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  });
+
+  const database = createTestDatabase();
+  const passwordHash = await bcrypt.hash("safe-password-123", 4);
+  database.users.push({
+    id: randomUUID(),
+    name: "Morgan Chen",
+    email: "morgan@example.com",
+    passwordHash,
+    role: "ACCOUNT_HOLDER",
+    isActive: true,
+  });
+  const baseUrl = await startTestServer(t, database);
+  const response = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "morgan@example.com", password: "safe-password-123" }),
+  });
+  assert.equal(response.status, 200);
+
+  const loginCookie = response.headers.get("set-cookie");
+  assert.match(loginCookie, /HttpOnly/i);
+  assert.match(loginCookie, /SameSite=None/i);
+  assert.match(loginCookie, /;\s*Secure(?:;|$)/i);
+  assert.match(loginCookie, /Path=\/api/i);
+  assert.match(loginCookie, /Max-Age=3600/i);
+
+  const logout = await fetch(`${baseUrl}/api/auth/logout`, { method: "POST" });
+  const logoutCookie = logout.headers.get("set-cookie");
+  assert.match(logoutCookie, /HttpOnly/i);
+  assert.match(logoutCookie, /SameSite=None/i);
+  assert.match(logoutCookie, /;\s*Secure(?:;|$)/i);
+  assert.match(logoutCookie, /Path=\/api/i);
+  assert.match(logoutCookie, /Max-Age=0/i);
 });
 
 test("authentication rejects missing, tampered, and inactive-user sessions", async (t) => {

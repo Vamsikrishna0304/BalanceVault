@@ -78,38 +78,39 @@ function createAuthMiddleware({ prisma, jwtSecret }) {
 }
 
 function sessionCookieOptions() {
+  const secure = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure,
+    sameSite: secure ? "none" : "lax",
     path: "/api",
     maxAge: 60 * 60 * 1000,
   };
 }
 
-function setSessionCookie(res, token) {
+function sessionCookieAttributes(value, maxAge) {
   const options = sessionCookieOptions();
   const attributes = [
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
-    "HttpOnly",
-    "SameSite=Lax",
-    "Path=/api",
-    `Max-Age=${Math.floor(options.maxAge / 1000)}`,
+    `${SESSION_COOKIE}=${value}`,
+    options.httpOnly ? "HttpOnly" : null,
+    `SameSite=${options.sameSite}`,
+    `Path=${options.path}`,
+    `Max-Age=${Math.floor(maxAge / 1000)}`,
   ];
   if (options.secure) attributes.push("Secure");
-  res.setHeader("Set-Cookie", attributes.join("; "));
+  return attributes.filter(Boolean).join("; ");
+}
+
+function setSessionCookie(res, token) {
+  const options = sessionCookieOptions();
+  res.setHeader(
+    "Set-Cookie",
+    sessionCookieAttributes(encodeURIComponent(token), options.maxAge),
+  );
 }
 
 function clearSessionCookie(res) {
-  const attributes = [
-    `${SESSION_COOKIE}=`,
-    "HttpOnly",
-    "SameSite=Lax",
-    "Path=/api",
-    "Max-Age=0",
-  ];
-  if (process.env.NODE_ENV === "production") attributes.push("Secure");
-  res.setHeader("Set-Cookie", attributes.join("; "));
+  res.setHeader("Set-Cookie", sessionCookieAttributes("", 0));
 }
 
 module.exports = {
