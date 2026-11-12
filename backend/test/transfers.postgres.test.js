@@ -23,52 +23,50 @@ async function createFixture(t, sourceBalance = "100.00", destinationBalance = "
 
   const cleanup = async () => {
     if (accountIds.length === 0 && userIds.length === 0) return;
-    await prisma.$transaction(async (tx) => {
-      const transfers = accountIds.length
-        ? await tx.transfer.findMany({
-          where: {
-            OR: [
-              { fromAccountId: { in: accountIds } },
-              { toAccountId: { in: accountIds } },
-            ],
-          },
-          select: { id: true },
-        })
-        : [];
-      const transferIds = transfers.map(({ id }) => id);
-      const auditEntityIds = [...accountIds, ...userIds, ...transferIds];
+    const transfers = accountIds.length
+      ? await prisma.transfer.findMany({
+        where: {
+          OR: [
+            { fromAccountId: { in: accountIds } },
+            { toAccountId: { in: accountIds } },
+          ],
+        },
+        select: { id: true },
+      })
+      : [];
+    const transferIds = transfers.map(({ id }) => id);
+    const auditEntityIds = [...accountIds, ...userIds, ...transferIds];
 
-      if (userIds.length || auditEntityIds.length) {
-        await tx.auditLog.deleteMany({
-          where: {
-            OR: [
-              ...(userIds.length ? [{ actorId: { in: userIds } }] : []),
-              ...(auditEntityIds.length ? [{ entityId: { in: auditEntityIds } }] : []),
-            ],
-          },
-        });
-      }
-      if (accountIds.length) {
-        await tx.ledgerEntry.deleteMany({ where: { accountId: { in: accountIds } } });
-        await tx.transfer.deleteMany({
-          where: {
-            OR: [
-              { fromAccountId: { in: accountIds } },
-              { toAccountId: { in: accountIds } },
-            ],
-          },
-        });
-      }
-      if (userIds.length) {
-        await tx.idempotencyKey.deleteMany({ where: { userId: { in: userIds } } });
-      }
-      if (accountIds.length) {
-        await tx.account.deleteMany({ where: { id: { in: accountIds } } });
-      }
-      if (userIds.length) {
-        await tx.user.deleteMany({ where: { id: { in: userIds } } });
-      }
-    });
+    if (userIds.length || auditEntityIds.length) {
+      await prisma.auditLog.deleteMany({
+        where: {
+          OR: [
+            ...(userIds.length ? [{ actorId: { in: userIds } }] : []),
+            ...(auditEntityIds.length ? [{ entityId: { in: auditEntityIds } }] : []),
+          ],
+        },
+      });
+    }
+    if (accountIds.length) {
+      await prisma.ledgerEntry.deleteMany({ where: { accountId: { in: accountIds } } });
+      await prisma.transfer.deleteMany({
+        where: {
+          OR: [
+            { fromAccountId: { in: accountIds } },
+            { toAccountId: { in: accountIds } },
+          ],
+        },
+      });
+    }
+    if (userIds.length) {
+      await prisma.idempotencyKey.deleteMany({ where: { userId: { in: userIds } } });
+    }
+    if (accountIds.length) {
+      await prisma.account.deleteMany({ where: { id: { in: accountIds } } });
+    }
+    if (userIds.length) {
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    }
   };
   t.after(cleanup);
 
